@@ -15,8 +15,9 @@ namespace NullGuard.PostSharp
         bool validateReturnValue;
         string memberName;
         bool isProperty;
-        
-        public EnsureNonNullAspect() : this(ValidationFlags.AllPublic)
+
+        public EnsureNonNullAspect()
+            : this(ValidationFlags.AllPublic)
         {
         }
 
@@ -48,7 +49,7 @@ namespace NullGuard.PostSharp
             this.isProperty = methodInformation.IsProperty;
 
             ParameterInfo[] argumentsToValidate = parameters.Where(p => p.MayNotBeNull()).ToArray();
-      
+
             // Build the list of input arguments that need to be validated.
             if (ValidationFlags.HasFlag(ValidationFlags.Arguments))
             {
@@ -81,56 +82,69 @@ namespace NullGuard.PostSharp
             return validationRequired;
         }
 
-   
+
         public override void OnEntry(MethodExecutionArgs args)
         {
             // Validate input arguments. No reflection is used and no memory is allocated by the aspect itself.
-
-            foreach (int argumentPosition in inputArgumentsToValidate)
+            if (inputArgumentsToValidate != null)
             {
-                if (args.Arguments[argumentPosition] == null)
+                foreach (int argumentPosition in inputArgumentsToValidate)
                 {
-                    string parameterName = this.parameterNames[argumentPosition];
-
-                    if (this.isProperty)
-                    {
-                        
-                        throw new ArgumentNullException(parameterName,
-                            String.Format(CultureInfo.InvariantCulture,
-                                "Cannot set the value of property '{0}' to null.",
-                                this.memberName));
-                    }
-                    else
-                    {
-                        throw new ArgumentNullException(parameterName);
-                    }
+                    ValidateArgumentAtPosition(args, argumentPosition);
                 }
             }
+        }
 
-     
+        void ValidateArgumentAtPosition(MethodExecutionArgs args, int argumentPosition)
+        {
+            if (args.Arguments[argumentPosition] != null) return;
 
+            string parameterName = this.parameterNames[argumentPosition];
+            if (isProperty)
+                ThrowArgumentNullExceptionForProperty(parameterName);
+
+            throw new ArgumentNullException(parameterName);
+        }
+
+        void ThrowArgumentNullExceptionForProperty(string propertyName)
+        {
+            throw new ArgumentNullException(propertyName,
+                String.Format(CultureInfo.InvariantCulture,
+                    "Cannot set the value of property '{0}' to null.",
+                    memberName));
         }
 
         public override void OnSuccess(MethodExecutionArgs args)
         {
+            if (outputArgumentsToValidate != null)
+            {
+                ValidateOutputArguments(args);
+                ValidateReturnValue(args);
+            }
+        }
 
-            // Validate output arguments. 
-
+        void ValidateOutputArguments(MethodExecutionArgs args)
+        {
             foreach (int argumentPosition in outputArgumentsToValidate)
             {
-                if (args.Arguments[argumentPosition] == null)
-                {
-                    string parameterName = this.parameterNames[argumentPosition];
-
-                      throw new InvalidOperationException(String.Format(CultureInfo.InvariantCulture,
-                            "Out parameter '{0}' is null.", parameterName));
-                }
-                
+                ValidateOutputArgumentAtPosition(args, argumentPosition);
             }
+        }
 
-            // Validate the return value.
+        void ValidateOutputArgumentAtPosition(MethodExecutionArgs args, int argumentPosition)
+        {
+            if (args.Arguments[argumentPosition] == null)
+            {
+                string parameterName = parameterNames[argumentPosition];
 
-            if (this.validateReturnValue && args.ReturnValue == null )
+                throw new InvalidOperationException(String.Format(CultureInfo.InvariantCulture,
+                    "Out parameter '{0}' is null.", parameterName));
+            }
+        }
+
+        void ValidateReturnValue(MethodExecutionArgs args)
+        {
+            if (this.validateReturnValue && args.ReturnValue == null)
             {
                 if (this.isProperty)
                 {
@@ -142,21 +156,20 @@ namespace NullGuard.PostSharp
                 throw new InvalidOperationException(String.Format(CultureInfo.InvariantCulture,
                     "Return value of method '{0}' is null.", this.memberName));
             }
-
-      
-           
         }
 
         class MethodInformation
         {
-            MethodInformation(ConstructorInfo constructor) : this((MethodBase) constructor)
+            MethodInformation(ConstructorInfo constructor)
+                : this((MethodBase)constructor)
             {
                 IsConstructor = true;
                 Name = constructor.Name;
-                
+
             }
 
-            MethodInformation(MethodInfo method) : this((MethodBase) method)
+            MethodInformation(MethodInfo method)
+                : this((MethodBase)method)
             {
                 IsConstructor = false;
                 Name = method.Name;
@@ -173,10 +186,10 @@ namespace NullGuard.PostSharp
             MethodInformation(MethodBase method)
             {
                 IsPublic = method.IsPublic;
-       
+
             }
 
-            public static MethodInformation GetMethodInformation(MethodBase  methodBase)
+            public static MethodInformation GetMethodInformation(MethodBase methodBase)
             {
                 var ctor = methodBase as ConstructorInfo;
                 if (ctor != null) return new MethodInformation(ctor);
@@ -192,8 +205,8 @@ namespace NullGuard.PostSharp
 
             public bool IsConstructor { get; private set; }
 
-            
-             public ParameterInfo ReturnParameter { get; private set; }
+
+            public ParameterInfo ReturnParameter { get; private set; }
         }
     }
 }
